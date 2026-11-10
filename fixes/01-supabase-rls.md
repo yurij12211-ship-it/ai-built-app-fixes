@@ -58,9 +58,18 @@ Use this for anything that belongs to one user: projects, notes, orders, setting
 
 ```sql
 -- 1. every row must know its owner
+--    add it nullable first: on a table with existing rows, a one-step
+--    "not null default auth.uid()" fails (no JWT in the SQL editor, so auth.uid() is null)
 alter table public.projects
-  add column if not exists user_id uuid not null default auth.uid()
-  references auth.users (id) on delete cascade;
+  add column if not exists user_id uuid references auth.users (id) on delete cascade;
+
+-- backfill old rows BEFORE enabling policies, or they vanish for everyone
+-- (rule: a created_by column, an email match, or one admin owner)
+update public.projects set user_id = '<owner uuid>' where user_id is null;
+
+alter table public.projects
+  alter column user_id set default auth.uid(),
+  alter column user_id set not null;
 
 create index if not exists projects_user_id_idx on public.projects (user_id);
 
